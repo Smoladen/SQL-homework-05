@@ -1,223 +1,102 @@
 #include "client_manager.h"
 
-void ClientManager::createTable(){
-        try {
-            pqxx::work W(conn);
 
-            std::string users =
-                "CREATE TABLE IF NOT EXISTS users ("
-                "ID SERIAL PRIMARY KEY, "
-                "NAME TEXT NOT NULL, "
-                "SURNAME TEXT NOT NULL, "
-                "\"email\" TEXT NOT NULL"
-                ");";
-            std::string usertelephone =
-                "CREATE TABLE IF NOT EXISTS user_telephones ("
-                "telephoneId SERIAL PRIMARY KEY, "
-                "userId INTEGER REFERENCES users(ID) ON DELETE CASCADE, "
-                "telephone TEXT"
-                ");";;
 
-            W.exec(users);
-            W.exec(usertelephone);
-            W.commit();
-            std::cout << "Table created." << std::endl;
-        } catch (const std::exception &e) {
-            std::cout<< "Exception Happened: " << e.what() << std::endl;
-        }
-    };
+void ClientManager::initDbStructure(){
 
-void ClientManager::addUser(){
-        try {
-            std::string name, surname, email;
+    pqxx::work W(conn);
 
-            std::cout << "Enter name: ";
-            std::cin >> name;
+    std::string users =
+        "CREATE TABLE IF NOT EXISTS users ("
+        "ID SERIAL PRIMARY KEY, "
+        "firstName TEXT NOT NULL, "
+        "lastName TEXT NOT NULL, "
+        "\"email\" TEXT NOT NULL"
+        ");";
+    std::string phones =
+        "CREATE TABLE IF NOT EXISTS user_telephones ("
+        "telephoneId SERIAL PRIMARY KEY, "
+        "userId INTEGER REFERENCES users(ID) ON DELETE CASCADE, "
+        "telephone TEXT"
+        ");";;
 
-            std::cout << "Enter surname: ";
-            std::cin >> surname;
+    W.exec(users);
+    W.exec(phones);
+    W.commit();
+    }
 
-            std::cout << "Enter email: ";
-            std::cin >> email;
+int ClientManager::addClient(const std::string& firstName, const std::string& lastName, const std::string& email) {
+    pqxx::work W(conn);
 
-            pqxx::work W(conn);
+    pqxx::result r = W.exec(
+        "INSERT INTO users (firstName, lastName, \"email\") "
+        "VALUES (" + W.quote(firstName) + ", " + W.quote(lastName) + ", " + W.quote(email) + ") "
+        "RETURNING ID;"
+        );
 
-            std::string sql =
-                "INSERT INTO users (name, surname, \"email\") "
-                "VALUES (" + W.quote(name) + ", " + W.quote(surname) + ", " + W.quote(email) + ");";
+    W.commit();
+    return r[0][0].as<int>();
+}
 
-            W.exec(sql);
 
-            W.commit();
-            std::cout << "User added successfully!" << std::endl;
-        } catch (const std::exception &e) {
-            std::cout << "Error adding user: " << e.what() << std::endl;
-        }
+void ClientManager::addPhoneNumber(int clientId, const std::string& phoneNumber) {
+
+    pqxx::work W(conn);
+
+    W.exec(
+        "INSERT INTO user_telephones (userId, telephone)"
+        "VALUES (" + W.quote(clientId) + ", " + W.quote(phoneNumber) + ");"
+    );
+    W.commit();
+
 };
+void ClientManager::updateClient(int clientId, const std::string& firstName, const std::string& lastName, const std::string& email) {
+    pqxx::work W(conn);
+    W.exec(
+        "UPDATE users SET firstName = " + W.quote(firstName)+
+        ", lastName = " + W.quote(lastName) +
+        ", \"email\" = " + W.quote(email) +
+        "WHERE ID = " + W.quote(clientId) + ";"
+    );
+    W.commit();
 
-void ClientManager::addTelephone() {
-        try {
-            int userId;
-            std::string telephone;
-
-            std::cout << "Enter user ID: ";
-            std::cin >> userId;
-
-            std::cout << "Enter telephone number: ";
-            std::cin >>  telephone;
-
-            pqxx::work W(conn);
-
-            std::string findUserById =
-                "SELECT ID FROM users WHERE ID = " + W.quote(userId) + ";";
-
-            pqxx::result r = W.exec(findUserById);
-
-            if (r.empty()) {
-                std::cout << "No user found with the given ID." << std::endl;
-                return;
-            }
-
-            std::string addTel =
-                "INSERT INTO user_telephones (userId, telephone) "
-                "VALUES (" + W.quote(userId) + ", " + W.quote(telephone) + ");";
-
-            W.exec(addTel);
-            W.commit();
-
-            std::cout << "Telephone added successfully!" << std::endl;
-        } catch (const std::exception &e) {
-            std::cout << "Error adding telephone: " << e.what() << std::endl;
-        }
-};
-void ClientManager::updateUser() {
-        try {
-            int userId;
-            std::string field, newValue;
-
-            std::cout << "Enter user ID: ";
-            std::cin >> userId;
-
-            std::cout << "Which field do you want to update? (name/surname/email): ";
-            std::cin >> field;
-
-            if (field != "name" && field != "surname" && field != "email") {
-                std::cout << "Invalid field. Please choose 'name', 'surname', or 'email'." << std::endl;
-                return;
-            }
-
-            std::cout << "Enter new value for " << field << ": ";
-            std::cin.ignore();
-            std::getline(std::cin, newValue);
-
-            pqxx::work W(conn);
-
-            std::string updateQuery;
-            if (field == "email") {
-                updateQuery = "UPDATE users SET \"email\" = " + W.quote(newValue) + " WHERE ID = " + W.quote(userId) + ";";
-            } else {
-                updateQuery = "UPDATE users SET " + field + " = " + W.quote(newValue) + " WHERE ID = " + W.quote(userId) + ";";
-            }
-
-            W.exec(updateQuery);
-            W.commit();
-
-            std::cout << "User's " << field << " updated successfully!" << std::endl;
-        } catch (const std::exception &e) {
-            std::cout << "Error updating user: " << e.what() << std::endl;
-        }
 };
 
 
-void ClientManager::deleteTelephone() {
-        try {
-            int userId;
-            std::string telephone;
+void ClientManager::removePhoneNumber(int clientId, const std::string& phoneNumber) {
+    pqxx::work W(conn);
 
-            std::cout << "Enter user ID: ";
-            std::cin >> userId;
-
-            pqxx::work W(conn);
-
-            std::string deleteQuery =
-                "DELETE FROM user_telephones WHERE userId = " + W.quote(userId) +";";
-
-            W.exec(deleteQuery);
-            W.commit();
-
-            std::cout << "Telephone deleted successfully!" << std::endl;
-        } catch (const std::exception &e) {
-            std::cout << "Error deleting telephone: " << e.what() << std::endl;
-        }
-};
-void ClientManager::deleteUser() {
-        try {
-            int userId;
-
-            std::cout << "Enter user ID to delete: ";
-            std::cin >> userId;
-
-            pqxx::work W(conn);
-
-            std::string deleteQuery =
-                "DELETE FROM users WHERE ID = " + W.quote(userId) + ";";
-
-            W.exec(deleteQuery);
-            W.commit();
-
-            std::cout << "User and all associated telephones deleted successfully!" << std::endl;
-        } catch (const std::exception &e) {
-            std::cout << "Error deleting user: " << e.what() << std::endl;
-        }
+    W.exec(
+        "DELETE FROM user_telephones WHERE userId = " + W.quote(clientId) +
+        " AND telephone = " + W.quote(phoneNumber) + ";"
+    );
+    W.commit();
 };
 
-void ClientManager::findUser() {
-        try {
-            std::string searchField, searchValue;
+void ClientManager::removeClient(int clientId) {
+    pqxx::work W(conn);
+    W.exec("DELETE FROM users WHERE ID = " + W.quote(clientId) + ";");
+    W.commit();
+};
 
-            std::cout << "Search by (name/surname/email/telephone): ";
-            std::cin >> searchField;
+std::vector<Client> ClientManager::findClient(const std::string& searchValue) {
+    pqxx::work W(conn);
 
-            if (searchField != "name" && searchField != "surname" && searchField != "email" && searchField != "telephone") {
-                std::cout << "Invalid search field. Please choose 'name', 'surname', 'email', or 'telephone'." << std::endl;
-                return;
-            }
+    pqxx::result r = W.exec(
+        "SELECT * FROM users WHERE firstName = " + W.quote(searchValue) +
+        "OR lastName = " + W.quote(searchValue) +
+        "OR \"email\" = " + W.quote(searchValue) +
+        "OR ID IN (SELECT userId FROM user_telephones WHERE telephone = " + W.quote(searchValue) + ");"
+    );
 
-            std::cout << "Enter " << searchField << " to search: ";
-            std::cin.ignore();
-            std::getline(std::cin, searchValue);
-
-            pqxx::work W(conn);
-            pqxx::result r;
-
-
-            if (searchField == "name") {
-                r = W.exec("SELECT * FROM users WHERE name = " + W.quote(searchValue) + ";");
-            } else if (searchField == "surname") {
-                r = W.exec("SELECT * FROM users WHERE surname = " + W.quote(searchValue) + ";");
-            } else if (searchField == "email") {
-                r = W.exec("SELECT * FROM users WHERE \"email\" = " + W.quote(searchValue) + ";");
-            } else if (searchField == "telephone") {
-                r = W.exec("SELECT u.* FROM users u "
-                           "JOIN user_telephones ut ON u.ID = ut.userId "
-                           "WHERE ut.telephone = " + W.quote(searchValue) + ";");
-            }
-
-            if (r.empty()) {
-                std::cout << "No user found with the given " << searchField << "." << std::endl;
-            } else {
-                for (const auto& row : r) {
-                    std::cout << "User found: " << std::endl;
-                    std::cout << "ID: " << row["id"].as<int>() << std::endl;
-                    std::cout << "Name: " << row["name"].as<std::string>() << std::endl;
-                    std::cout << "Surname: " << row["surname"].as<std::string>() << std::endl;
-                    std::cout << "Email: " << row["email"].as<std::string>() << std::endl;
-                    std::cout << "--------" << std::endl;
-                }
-            }
-
-            W.commit();
-        } catch (const std::exception &e) {
-            std::cout << "Error searching for user: " << e.what() << std::endl;
-        }
+    std::vector<Client> clients;
+    for (const auto& row : r) {
+        clients.push_back(Client{
+            row["ID"].as<int>(),
+            row["firstName"].as<std::string>(),
+            row["lastName"].as<std::string>(),
+            row["email"].as<std::string>()
+        });
+    }
+    return clients;
 };
